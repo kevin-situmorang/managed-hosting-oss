@@ -308,3 +308,155 @@ Phase 3 (After 3+ clients): Build AIOps alert classifier (~1-2 weeks)
 | Total COGS | Rp 625K-1.15M/client/mo | Rp 370K-580K/client/mo | Makes Rp 500K base viable |
 
 At 50 clients with Rp 1M/month pricing: ~Rp 21M-32M/month gross profit, 2 engineers.
+
+## Engineering Architecture (Added by /plan-eng-review 2026-05-25)
+
+### Decisions Locked
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Phase scope | Phase 0+1 deep, Phase 2-3 sketch | Actionable before LOI; revisit before Phase 2 build |
+| Bot deployment | Central Hutabyte server | Fix once, applies to all clients |
+| RAG approach | Prompt-stuffing (Phase 1) | 200k context fits all modules; upgrade to vector RAG at 5+ clients |
+| Bot channel | Telegram first, WhatsApp later | Zero business verification, free, faster to validate |
+| Client credentials | age-encrypted YAML, two custodians | Scales to 20+ clients; survives engineer turnover |
+| PII firewall | Field whitelist (enforced at Odoo client + payload layers) | Blocks unknown PII by default; auditable by non-engineers |
+| Language + repo | Python monorepo (support-bot/, deploy/, aiops/, common/) | Shared PII firewall + Odoo client; Ansible is Python-native |
+| Webhook handling | FastAPI async: 200 OK in <1s, reply via sendMessage async | Telegram 5s timeout; Claude API 2-4s; sync = duplicate messages |
+| Conversation state | PostgreSQL | Concurrent workers safe; no migration needed later |
+| Key management | Two custodians, encrypted backup in private repo | Lose age key = lose all client configs |
+
+### System Architecture
+
+```
+HUTABYTE CENTRAL SERVER (one for all clients)
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│  support-bot/                                           │
+│  ┌─────────────────┐    ┌──────────────────────────┐   │
+│  │ FastAPI webhook  │───▶│ bot_handler.py           │   │
+│  │ (Telegram)       │    │  1. client_router lookup │   │
+│  │ 200 OK <1s      │    │  2. pii_firewall check   │   │
+│  └─────────────────┘    │  3. odoo_client query    │   │
+│           │             │  4. Claude API call      │   │
+│           ▼             │  5. turn count check     │   │
+│  ┌─────────────────┐    │  6. sendMessage async    │   │
+│  │ PostgreSQL       │    └──────────────────────────┘   │
+│  │ conversation     │              │                     │
+│  │ state           │              ▼                     │
+│  └─────────────────┘    ┌──────────────────────────┐   │
+│                         │ escalation.py             │   │
+│  common/                │ (if turn_count >= 2)      │   │
+│  ├── pii_firewall.py    └──────────────────────────┘   │
+│  ├── odoo_client.py                                     │
+│  ├── client_router.py                                   │
+│  └── client_config.py                                   │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+         │                              │
+         ▼                              ▼
+  CLIENT ODOO VPS                CLAUDE API (Sonnet 4.6)
+  (read-only XML-RPC)            (Bahasa Indonesia)
+  whitelisted fields only        prompt caching enabled
+```
+
+### NOT in Scope
+
+- Vector RAG / ChromaDB — deferred until 5+ clients or docs exceed 100k tokens
+- WhatsApp Business API — deferred to Phase 2 (after first paying client)
+- Multi-tenant Odoo — deferred to 10+ clients per CEO review
+- Auto-remediation in AIOps — permanently excluded (classify-only per D4)
+- Twilio integration — excluded (Meta Cloud API or Telegram preferred)
+- Secrets manager (Doppler/Vault) — deferred until 5+ clients and 2nd engineer
+
+### What Already Exists
+
+- `docs/design.md` (this file) — problem statement, COGS worksheet, service agreement clauses, AI design
+- `CLAUDE.md` — skill routing rules
+
+Nothing in common/, support-bot/, deploy/, aiops/ exists yet — fully greenfield.
+
+### Failure Modes
+
+| Codepath | Production failure | Test coverage | Error handling | User experience |
+|---|---|---|---|---|
+| Odoo API unreachable | Connection timeout during query | GAP | GAP | Silent failure unless added |
+| PII whitelist stale after Odoo upgrade | New field passes through to Claude | CI gate catches at deploy | Whitelist check at query + payload layers | Bot returns PII to user |
+| Escalation notification fails | Hutabyte Telegram unreachable | GAP | GAP | User told nothing, case lost |
+| age key lost | All client configs unrecoverable | N/A | Two-custodian procedure | Complete service outage |
+| Telegram webhook retry (5s timeout) | Duplicate message + confused turn count | GAP | Async handling prevents most cases | Duplicate reply to user |
+
+**Critical gaps:** Odoo timeout handling + escalation failure fallback — both need error handling and tests before first client demo.
+
+### Implementation Tasks
+
+Synthesized from engineering review findings. P1 = blocks ship; P2 = same branch; P3 = follow-up.
+
+- [ ] **T1 (P1, human: ~2hrs / CC: ~15min)** — docs — Write data minimization spec
+  - Files: `docs/ai-data-policy.md`
+  - Verify: reviewed by Hutabyte lead before LOI presentation
+- [ ] **T2 (P1, human: ~1hr / CC: ~10min)** — docs — Write service agreement template with AI data handling clause
+  - Files: `docs/service-agreement-template.md`
+  - Verify: covers 7 required clauses from design doc + AI processing scope
+- [ ] **T3 (P1, human: ~30min / CC: ~10min)** — docs — Document age key management procedure
+  - Files: `docs/age-key-procedure.md`
+  - Verify: two custodians named, backup location documented, rotation schedule set
+- [ ] **T4 (P1, human: ~1hr / CC: ~10min)** — infra — Scaffold Python monorepo
+  - Files: `pyproject.toml`, `common/`, `support-bot/`, `deploy/`, `aiops/`, `Dockerfile`, `docker-compose.hutabyte.yml`
+  - Verify: `pip install -e .` succeeds, all packages importable
+- [ ] **T5 (P1, human: ~2hrs / CC: ~20min)** — common — Build PII firewall with pytest suite
+  - Files: `common/pii_firewall.py`, `tests/test_pii_firewall.py`
+  - Verify: `pytest tests/test_pii_firewall.py` — all 14 codepaths covered
+- [ ] **T6 (P1, human: ~2hrs / CC: ~20min)** — common — Build Odoo XML-RPC read-only client
+  - Files: `common/odoo_client.py`, `tests/test_odoo_client.py`
+  - Verify: OdooAuthError and OdooTimeoutError raised correctly; only whitelisted fields requested
+- [ ] **T7 (P1, human: ~1hr / CC: ~15min)** — common — Build client config loader + router
+  - Files: `common/client_config.py`, `common/client_router.py`, `tests/test_client_config.py`
+  - Verify: UnknownClientError on unknown Telegram user ID; decryption works with test age key
+- [ ] **T8 (P1, human: ~5 days / CC: ~2 days)** — support-bot — Build full support bot (after LOI)
+  - Files: `support-bot/main.py`, `support-bot/webhook.py`, `support-bot/bot_handler.py`, `support-bot/claude_client.py`, `support-bot/state.py`, `support-bot/escalation.py`, `support-bot/prompts/system_id.md`
+  - Verify: end-to-end Telegram → Odoo → Claude → reply; escalation fires at turn 2; no duplicate messages under simulated 5s Telegram retry
+- [ ] **T9 (P1, human: ~1hr / CC: ~20min)** — ci — GitHub Actions CI: PII firewall gate
+  - Files: `.github/workflows/pii-firewall.yml`, `.github/workflows/test.yml`
+  - Verify: merge blocked if PII firewall test fails; runs on every PR
+- [ ] **T10 (P3, human: ~2-3 weeks / CC: ~3-4 days)** — deploy — Phase 2 sketch: AI deployment automation
+  - Files: `deploy/README.md`, `deploy/intake_form.py`, `deploy/playbook_generator.py`, `deploy/ansible/`
+  - Trigger: after LOI signed + first client stable
+- [ ] **T11 (P3, human: ~1-2 weeks / CC: ~2 days)** — aiops — Phase 3 sketch: alert classifier
+  - Files: `aiops/README.md`, `aiops/classifier.py`, `aiops/alert_handler.py`
+  - Trigger: after 3+ paying clients
+
+### Parallelization Strategy
+
+```
+Lane A (Phase 0 docs — independent, run in parallel):
+  T1 (ai-data-policy) || T2 (service-agreement) || T3 (age-key-procedure)
+
+Lane B (Phase 1 infra + shared modules):
+  T4 (scaffold) → T5 (pii_firewall) || T6 (odoo_client) || T7 (client_config)
+                → T9 (CI pipeline)   [starts after T4, independent of T5-T7]
+
+Lane C (Phase 1 bot — depends on B):
+  [T5 + T6 + T7 complete] → T8 (support-bot full build)
+
+Lane D (Phase 2-3 — deferred):
+  T10, T11 — do not start until gates met
+```
+
+Launch Lane A immediately. Lane B starts after LOI is signed.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | Full AI-Ops Stack selected, LOI-first sequence, data guardrails |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 8 architecture decisions, PostgreSQL, age key management |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | Not applicable (no UI in Phase 0-1) |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+| Outside Voice | Codex gpt-5.3 | Independent challenge | 1 | ISSUES_NOTED | SQLite concurrency risk → resolved (PostgreSQL); age key lifecycle → resolved (two custodians + backup) |
+
+**CROSS-MODEL:** Codex and Claude eng review agree on: prompt-stuffing for Phase 1, central server architecture, LOI-first build sequence. Disagreement on SQLite (resolved: PostgreSQL chosen). Codex challenged overall complexity of AI stack before product-market proof — user acknowledged and accepted; LOI gate remains the guardrail.
+
+**UNRESOLVED:** 0 decisions left open.
+
+**VERDICT:** CEO + ENG CLEARED — ready to implement Phase 0 tasks (T1, T2, T3) immediately. Phase 1 tasks (T4–T9) unlock after LOI is signed.
