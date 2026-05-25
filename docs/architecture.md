@@ -5,16 +5,18 @@ Status: APPROVED (eng review cleared)
 
 ---
 
-## Overview: Four Phases
+## Overview: Four Phases (Build Order: 0 → 2 → 3 → 1)
 
 ```
-PHASE 0   Pre-LOI        Documents only. No infrastructure.
-PHASE 1   After LOI      AI Telegram Support Bot.
-PHASE 2   After 1 client AI Deployment Automation.
-PHASE 3   3+ clients     AIOps Alert Classifier.
+PHASE 0   Pre-LOI           Documents only. No infrastructure. Covers Odoo (nonprofit) + ERPNext (retailer).
+PHASE 2   After LOI          AI Deployment Automation. Ansible for both Odoo + ERPNext.
+PHASE 3   After 1st client   AIOps Classifier + COGS automation suite (patching, backup verify, health page, right-sizing).
+PHASE 1   After 3+ clients   AI Telegram Support Bot. Deprioritized — not key for COGS reduction.
 ```
 
-Each phase gates on the previous. Nothing is built speculatively.
+Phase order changed: deployment automation (Phase 2) builds first because it directly enables
+client onboarding and reduces the largest COGS variable (engineer deployment time). Support bot
+(Phase 1) builds last — useful but not a managed hosting differentiator. Nothing is built speculatively.
 
 ---
 
@@ -24,21 +26,26 @@ Each phase gates on the previous. Nothing is built speculatively.
 ┌─────────────────────────────────────────────────────────────────┐
 │  docs/                                                          │
 │  ├── design.md                 Business + AI design             │
-│  ├── ai-data-policy.md         Allowed vs forbidden Odoo fields │
+│  ├── ai-data-policy.md         Allowed vs forbidden ERP fields  │
 │  ├── service-agreement-template.md  AI data handling clause     │
-│  └── age-key-procedure.md      Key custodians + rotation plan   │
+│  ├── age-key-procedure.md      Key custodians + rotation plan   │
+│  ├── odoo-config-spec.md       Nonprofit pilot: Odoo 17 CE      │
+│  │                             modules, Docker image, roles     │
+│  └── erpnext-config-spec.md    Retailer pilot: ERPNext          │
+│                                modules, Docker image, roles     │
 └─────────────────────────────────────────────────────────────────┘
                     ↓
-        Present to non-profit pilot
+      Present to BOTH pilots (nonprofit + retailer)
                     ↓
-              LOI signed? ──── NO ──→ Approach C (Rp 2M–3M framing)
+       Either LOI signed? ──── NO ──→ Approach C (Rp 2M–3M framing)
                     │
                    YES
                     ↓
-              Phase 1 begins
+              Phase 2 begins
 ```
 
-No servers. No code. Output: signed LOI at a real price.
+No servers. No code. Two LOI targets: nonprofit (Odoo) + retailer (ERPNext).
+Output: at least one signed LOI at a real price.
 
 ---
 
@@ -166,7 +173,7 @@ PII FIREWALL (double layer):
 
 ---
 
-## Phase 2 — AI Deployment Automation (After LOI + first client stable)
+## Phase 2 — AI Deployment Automation (After LOI — Priority 2)
 
 ```
 NEW CLIENT ONBOARDING FLOW
@@ -176,10 +183,12 @@ NEW CLIENT ONBOARDING FLOW
   │                                                                 │
   │  Hutabyte fills in:                                             │
   │  - client_name, segment (nonprofit/retailer)                   │
+  │  - erp_type: odoo | erpnext          ← NEW                     │
   │  - use_cases: [fund_mgmt, hr, procurement, reporting]          │
+  │    or:        [pos, inventory, sales]  (retailer ERPNext)      │
   │  - hetzner_region: singapore                                   │
   │  - subdomain: client.hutabyte.id                               │
-  │  - odoo_version: 17-community                                  │
+  │  - erp_version: 17-community | latest-erpnext                 │
   └──────────────────────┬──────────────────────────────────────────┘
                          │
                          ▼
@@ -187,8 +196,8 @@ NEW CLIENT ONBOARDING FLOW
   │  deploy/playbook_generator.py                                   │
   │                                                                 │
   │  Claude API (Sonnet 4.6):                                       │
-  │  system: "Generate Ansible playbook for Odoo 17 Community      │
-  │           deployment on Hetzner Ubuntu 22.04..."               │
+  │  system: "Generate Ansible playbook for {erp_type} deployment  │
+  │           on Hetzner Ubuntu 22.04..."  (Odoo or ERPNext)       │
   │  input: intake form JSON                                        │
   │  output: ansible/playbooks/{client}/site.yml                   │
   │        + docker-compose.{client}.yml                           │
@@ -215,7 +224,7 @@ NEW CLIENT ONBOARDING FLOW
   │  Provisions:                                                    │
   │  - Ubuntu 22.04 VPS (Hetzner CX31, Singapore)                  │
   │  - Docker + Docker Compose                                      │
-  │  - Odoo 17 Community + PostgreSQL container                     │
+  │  - Odoo 17 Community OR ERPNext + PostgreSQL container          │
   │  - Nginx reverse proxy + SSL (Let's Encrypt)                   │
   │  - UptimeRobot monitoring webhook                               │
   │  - Daily backup cron (S3-compatible)                           │
@@ -225,7 +234,7 @@ NEW CLIENT ONBOARDING FLOW
                          ▼
   ┌─────────────────────────────────────────────────────────────────┐
   │  Automated health check                                         │
-  │  - Odoo web UI responds 200                                     │
+  │  - Odoo or ERPNext web UI responds 200                          │
   │  - PostgreSQL reachable                                         │
   │  - Backup cron scheduled                                        │
   │  - UptimeRobot monitoring active                                │
@@ -238,24 +247,26 @@ NEW CLIENT ONBOARDING FLOW
 DEPLOY/ DIRECTORY STRUCTURE:
 
   deploy/
-  ├── intake_form.py          Web form or CLI intake
-  ├── playbook_generator.py   Claude API → Ansible YAML
-  ├── health_check.py         Post-deploy verification
+  ├── intake_form.py          Web form or CLI intake (erp_type: odoo | erpnext)
+  ├── playbook_generator.py   Claude API → Ansible YAML (dispatches by erp_type)
+  ├── health_check.py         Post-deploy verification (ERP-agnostic)
   └── ansible/
       ├── playbooks/
       │   └── {client-name}/
-      │       └── site.yml    Generated per client
+      │       └── site.yml    Generated per client (includes correct ERP role)
       ├── roles/
-      │   ├── odoo/           Reusable Odoo install role
+      │   ├── odoo/           Odoo 17 CE install role
+      │   ├── erpnext/        ERPNext install role
       │   ├── nginx/          Reverse proxy + SSL
-      │   └── backup/         S3 backup cron
+      │   ├── backup/         S3 backup cron
+      │   └── security-patch/ Unattended-upgrades + post-patch health check
       └── inventory/
-          └── {client}.ini    Per-client host config
+          └── {client}.ini    Per-client host config (erp_type field included)
 ```
 
 ---
 
-## Phase 3 — AIOps Alert Classifier (3+ clients)
+## Phase 3 — AIOps + COGS Automation Suite (After First Client Stable — Priority 3)
 
 ```
 INCIDENT DETECTION AND DIAGNOSIS FLOW
@@ -317,16 +328,81 @@ INCIDENT DETECTION AND DIAGNOSIS FLOW
   Rationale: AI-caused changes to production databases = data loss risk.
              AI classifies, humans always execute.
 
+─────────────────────────────────────────────────────────────────────
+
+COGS FEATURE 2: AUTOMATED SECURITY PATCHING
+
+  aiops/patching_scheduler.py
+      │ Runs on schedule (e.g., weekly)
+      ▼
+  deploy/ansible/roles/security-patch/
+      - Runs unattended-upgrades on client VPS
+      - Post-patch health check confirms ERP still responds 200
+      │ PASS → patch log sent to Hutabyte engineer (no action needed)
+      │ FAIL → alert sent: engineer investigates manually
+  Saves ~0.5hr/client/month of manual patching work
+
+─────────────────────────────────────────────────────────────────────
+
+COGS FEATURE 3: BACKUP RESTORE VERIFICATION
+
+  aiops/backup_verifier.py  (runs monthly, per client)
+      │
+      ▼
+  Pull last S3 backup → spin up ephemeral Docker container
+      │
+      ▼
+  Confirm PostgreSQL data is queryable (spot-check row count)
+      │
+      ├── PASS → log "backup verified {date}" → no action
+      └── FAIL → alert Hutabyte engineer: "backup unreadable for {client}"
+  Eliminates silent backup failures discovered only during disaster recovery.
+
+─────────────────────────────────────────────────────────────────────
+
+COGS FEATURE 4: CLIENT SELF-SERVICE HEALTH STATUS PAGE
+
+  aiops/health_dashboard/app.py
+      │ Per-client read-only page (auth via client token)
+      ▼
+  Displays:
+      - Uptime % (last 30 days, from UptimeRobot)
+      - Last backup timestamp + verification status
+      - Last security patch date
+      - Current ERP version (Odoo or ERPNext)
+  Reduces "is it working?" support queries without building a full support bot.
+
+─────────────────────────────────────────────────────────────────────
+
+COGS FEATURE 5: RESOURCE RIGHT-SIZING ALERTS
+
+  aiops/resource_monitor.py  (polls VPS metrics daily)
+      │
+      ├── CPU < 20% sustained 7 days  → alert: "downgrade candidate"
+      ├── RAM > 80% sustained 3 days  → alert: "upgrade candidate"
+      └── Disk > 70% used             → alert: "disk growing — review filestore"
+  Does NOT auto-resize. Engineer decides; engineer executes.
+  Potential saving: Hetzner CX21 (Rp 200K) vs CX31 (Rp 350K) = Rp 150K/client/month.
+
+─────────────────────────────────────────────────────────────────────
+
 AIOPS/ DIRECTORY STRUCTURE:
 
   aiops/
-  ├── alert_handler.py        Webhook receiver + metrics fetcher
-  ├── classifier.py           Claude API classification call
-  ├── incident_formatter.py   Structured summary generator
+  ├── alert_handler.py        Webhook receiver + metrics fetcher (T12)
+  ├── classifier.py           Claude API classification call (T12)
+  ├── incident_formatter.py   Structured summary generator (T12)
+  ├── patching_scheduler.py   Security patch runner + notifier (T13)
+  ├── backup_verifier.py      Monthly restore test (T14)
+  ├── resource_monitor.py     Right-sizing alerts (T16)
+  ├── health_dashboard/       Client self-service status page (T15)
+  │   ├── app.py
+  │   └── templates/
   └── runbooks/               Reference context for classifier
       ├── disk_full.md
       ├── memory_oom.md
       ├── odoo_crash.md
+      ├── erpnext_crash.md
       └── ssl_expiry.md
 ```
 
@@ -341,10 +417,10 @@ AIOPS/ DIRECTORY STRUCTURE:
 ║  CENTRAL SERVER (Hetzner VPS, Hutabyte-owned)                       ║
 ║  ┌────────────────────────────────────────────────────────────────┐ ║
 ║  │                                                                │ ║
-║  │  support-bot/     ← Phase 1: handles Telegram queries         │ ║
-║  │  deploy/          ← Phase 2: onboards new clients             │ ║
-║  │  aiops/           ← Phase 3: classifies alerts                │ ║
-║  │  common/          ← shared: PII firewall, Odoo client,        │ ║
+║  │  support-bot/     ← Phase 1 (deprioritized): Telegram queries  │ ║
+║  │  deploy/          ← Phase 2: onboards clients (Odoo+ERPNext)  │ ║
+║  │  aiops/           ← Phase 3: classifier + COGS automation     │ ║
+║  │  common/          ← shared: PII firewall, erp_client.py,      │ ║
 ║  │                             client router, config loader      │ ║
 ║  │  PostgreSQL       ← conversation state (support bot)          │ ║
 ║  │  configs/clients/ ← age-encrypted YAML per client             │ ║
@@ -365,7 +441,7 @@ AIOPS/ DIRECTORY STRUCTURE:
   │ nonprofit   │    │ retailer     │    │ ...          │
   │             │    │              │    │              │
   │ Hetzner VPS │    │ Hetzner VPS  │    │ Hetzner VPS  │
-  │ Odoo 17 CE  │    │ Odoo 17 CE   │    │ Odoo 17 CE   │
+  │ Odoo 17 CE  │    │ ERPNext      │    │ Odoo/ERPNext │
   │ PostgreSQL  │    │ PostgreSQL   │    │ PostgreSQL   │
   │ Nginx + SSL │    │ Nginx + SSL  │    │ Nginx + SSL  │
   │ S3 backups  │    │ S3 backups   │    │ S3 backups   │
@@ -392,26 +468,26 @@ EXTERNAL SERVICES:
 ## Build Gate Summary
 
 ```
-Phase 0  ──→  Deliver T1 + T2 + T3 (docs)
+Phase 0  ──→  Deliver T1 + T2 + T3 + T4 (docs, ERP config specs)
                   │
                   ▼
-            LOI signed?
-           YES         NO
-            │           └──→ Approach C (Rp 2M–3M "IT dept" framing)
+            Either LOI signed (nonprofit OR retailer)?
+           YES              NO
+            │                └──→ Approach C (Rp 2M–3M "IT dept" framing)
             ▼
-Phase 1  ──→  Build T4–T9 (support bot, ~1 week with CC)
+Phase 2  ──→  Build T5–T11 (monorepo + deploy automation, ~3–4 weeks with CC)
                   │
                   ▼
             First client stable + paying?
                   │
                   ▼
-Phase 2  ──→  Build T10 (deploy automation, ~2–3 weeks)
+Phase 3  ──→  Build T12–T16 (AIOps classifier + COGS suite, ~3–4 weeks)
                   │
                   ▼
             3+ paying clients?
                   │
                   ▼
-Phase 3  ──→  Build T11 (AIOps classifier, ~1–2 weeks)
+Phase 1  ──→  Build T17 (AI Telegram support bot, ~1 week) — DEPRIORITIZED
 ```
 
 ---
