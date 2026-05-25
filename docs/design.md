@@ -427,6 +427,11 @@ See COGS Worksheet above for full breakeven table and pricing strategy guidance.
 | Webhook handling | FastAPI async: 200 OK in <1s, reply via sendMessage async | Telegram 5s timeout; Claude API 2-4s; sync = duplicate messages |
 | Conversation state | PostgreSQL | Concurrent workers safe; no migration needed later |
 | Key management | Two custodians, encrypted backup in private repo | Lose age key = lose all client configs |
+| Playbook generation strategy | Template + variable substitution (Claude fills variables into known-good base templates, NOT free-form YAML) | Reduces hallucination surface; emits USE CASES MAPPED comment block so reviewing engineer can verify mapping |
+| Deploy interface | CLI throughout: interactive questionnaire (intake_form.py), pager review + typed approval "deploy {slug}" (gate), pass/fail table with next-steps checklist (health_check.py) | Single engineer operator; no browser dependency; works over SSH during live client onboarding call |
+| Client file location | deploy/clients/{slug}/ (config.yaml + site.yml + docker-compose.yml co-located per client) | ls deploy/clients/ shows all clients at a glance; avoids split between deploy/ and ansible/playbooks/ |
+| SSH resilience during deploy | screen/tmux wrapper for ansible-playbook site.yml; reattach command printed before deploy starts | 15-minute deploy over SSH; session drop without screen = invisible failure |
+| Shared CLI output module | deploy/cli.py with header(), ok(), fail(), warn() helpers | Prevents style drift across intake_form.py, playbook_generator.py, health_check.py |
 
 ### System Architecture
 
@@ -535,8 +540,9 @@ P1 = blocks ship; P2 = same branch; P3 = follow-up.
   - Files: `.github/workflows/pii-firewall.yml`, `.github/workflows/test.yml`
   - Verify: merge blocked if PII firewall test fails; runs on every PR
 - [ ] **T11 (P1, human: ~3-4 weeks / CC: ~4-5 days)** — deploy — AI deployment automation (Odoo + ERPNext)
-  - Files: `deploy/intake_form.py`, `deploy/playbook_generator.py`, `deploy/health_check.py`, `deploy/ansible/roles/odoo/`, `deploy/ansible/roles/erpnext/`, `deploy/ansible/roles/nginx/`, `deploy/ansible/roles/backup/`
-  - Verify: dry-run passes for both Odoo and ERPNext; time-to-live from approved intake < 30 minutes; health check confirms all services up
+  - Files: `deploy/cli.py`, `deploy/intake_form.py`, `deploy/playbook_generator.py`, `deploy/health_check.py`, `deploy/ansible/templates/odoo/site.yml.j2`, `deploy/ansible/templates/erpnext/site.yml.j2`, `deploy/ansible/roles/odoo/`, `deploy/ansible/roles/erpnext/`, `deploy/ansible/roles/nginx/`, `deploy/ansible/roles/backup/`
+  - Pre-conditions: (1) playbook_generator.py uses template+variable strategy — Claude fills `{{ client_name }}`, `{{ domain }}`, `{{ erp_type }}` etc. into known-good base templates, NOT free-form YAML; (2) generated files go to `deploy/clients/{slug}/` not `ansible/playbooks/`; (3) deploy runs under screen/tmux; (4) typed approval "deploy {slug}" required at both human gates; (5) health_check.py prints next-steps checklist on success
+  - Verify: dry-run passes for both Odoo and ERPNext; time-to-live from approved intake < 30 minutes; health check confirms all services up; SSH drop mid-deploy does not kill the ansible process
 
 **Phase 3a — Core AIOps + Patching (After First Client Stable, Priority 3)**
 
@@ -599,6 +605,7 @@ Launch Lane A immediately. Lane B starts after LOI is signed. Lane C starts afte
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | Full AI-Ops Stack selected, LOI-first sequence, data guardrails |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR | Run 1: 8 arch decisions, PostgreSQL, age key. Run 2: build order resequenced (0→2→3→1), ERPNext added, erp_router.py abstraction, Phase 3 expanded to 5 features (T12–T16), tasks T1–T17 |
+| Design Review | `/plan-design-review` | Phase 2 interaction design | 1 | CLEAR | Rated 2/10 → 6/10. Three unspecified interaction points designed (intake CLI, playbook review gate, health check output). Locked: template-based generation, typed approval, deploy/clients/{slug}/ file location, screen/tmux SSH resilience, shared deploy/cli.py. 6 decisions recorded in Decisions Locked table. |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | Not applicable (no UI in Phase 0-1) |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 | Outside Voice | Codex gpt-5.3 | Independent challenge | 2 | ISSUES_NOTED | Run 1: SQLite → PostgreSQL; age key → two custodians. Run 2: ERPNext dual-stack cost underestimated → T4 role-overlap gate added; Phase 3 scope creep → split 3a/3b; erp_client → erp_router (honest naming); patching no rollback → pre-patch Hetzner snapshot; Claude API COGS conflation → split steady-state vs one-time; age custodian TBD → must be named before first client |

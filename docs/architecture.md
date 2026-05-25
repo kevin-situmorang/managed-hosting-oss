@@ -195,20 +195,31 @@ NEW CLIENT ONBOARDING FLOW
   ┌─────────────────────────────────────────────────────────────────┐
   │  deploy/playbook_generator.py                                   │
   │                                                                 │
+  │  Strategy: template + variable substitution (NOT free-form)    │
+  │  Claude fills {{ client_name }}, {{ domain }}, {{ erp_type }}  │
+  │  etc. into a known-good base template per ERP type.            │
+  │  Emits "## USE CASES MAPPED" comment block at top of playbook  │
+  │  so reviewing engineer can verify each use_case → role mapping.│
+  │                                                                 │
   │  Claude API (Sonnet 4.6):                                       │
-  │  system: "Generate Ansible playbook for {erp_type} deployment  │
-  │           on Hetzner Ubuntu 22.04..."  (Odoo or ERPNext)       │
+  │  system: "Fill variables into the {erp_type} Ansible template" │
   │  input: intake form JSON                                        │
-  │  output: ansible/playbooks/{client}/site.yml                   │
-  │        + docker-compose.{client}.yml                           │
+  │  output: deploy/clients/{slug}/site.yml                        │
+  │        + deploy/clients/{slug}/docker-compose.yml              │
   └──────────────────────┬──────────────────────────────────────────┘
                          │
                          ▼
-                  HUMAN GATE ← Hutabyte engineer reviews
-                    │    │       playbook before any deploy
-              APPROVE   REJECT → edit intake form, regenerate
-                │
-                ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  HUMAN GATE #1 — CLI review (deploy/playbook_generator.py)      │
+  │                                                                 │
+  │  - Opens generated YAML in $PAGER (less) for review            │
+  │  - Runs ansible-lint + ansible-playbook --check automatically  │
+  │  - Typed approval required: "deploy {slug}"                    │
+  │  - "reject" returns to intake_form.py with pre-filled values   │
+  └──────────────────────┬──────────────────────────────────────────┘
+                    APPROVE   REJECT → edit intake form, regenerate
+                         │
+                         ▼
   ┌─────────────────────────────────────────────────────────────────┐
   │  ansible-playbook --check site.yml    (dry-run, no changes)     │
   │  ansible-lint site.yml               (syntax + best practices)  │
@@ -216,10 +227,12 @@ NEW CLIENT ONBOARDING FLOW
                          │ dry-run passes
                          ▼
               SECOND HUMAN GATE ← Engineer confirms deploy
-                         │
+                         │  (must type "deploy {slug}" to proceed)
                          ▼
   ┌─────────────────────────────────────────────────────────────────┐
   │  ansible-playbook site.yml    (real deploy to Hetzner VPS)      │
+  │  Runs under screen/tmux session "deploy-{slug}" so SSH drops   │
+  │  do not interrupt a 15-minute deploy.                           │
   │                                                                 │
   │  Provisions:                                                    │
   │  - Ubuntu 22.04 VPS (Hetzner CX31, Singapore)                  │
@@ -233,11 +246,21 @@ NEW CLIENT ONBOARDING FLOW
                          │
                          ▼
   ┌─────────────────────────────────────────────────────────────────┐
-  │  Automated health check                                         │
+  │  deploy/health_check.py — post-deploy verification             │
+  │                                                                 │
+  │  Outputs pass/fail table (✓/✗) with CHECK / STATUS / DETAIL   │
+  │  columns. On partial/total failure: prints likely causes and   │
+  │  retry command. On full pass: prints client URL + next steps   │
+  │  checklist (share URL, set admin password, add UptimeRobot,   │
+  │  file signed LOI).                                             │
+  │                                                                 │
+  │  Checks:                                                        │
   │  - Odoo or ERPNext web UI responds 200                          │
-  │  - PostgreSQL reachable                                         │
+  │  - PostgreSQL/MariaDB reachable                                 │
+  │  - frappe-bench queue workers active (ERPNext only)            │
   │  - Backup cron scheduled                                        │
   │  - UptimeRobot monitoring active                                │
+  │  - SSL certificate valid                                        │
   └──────────────────────┬──────────────────────────────────────────┘
                          │
                          ▼
@@ -247,13 +270,19 @@ NEW CLIENT ONBOARDING FLOW
 DEPLOY/ DIRECTORY STRUCTURE:
 
   deploy/
-  ├── intake_form.py          Web form or CLI intake (erp_type: odoo | erpnext)
-  ├── playbook_generator.py   Claude API → Ansible YAML (dispatches by erp_type)
-  ├── health_check.py         Post-deploy verification (ERP-agnostic)
+  ├── cli.py               Shared output helpers (header, ok, fail, warn)
+  ├── intake_form.py       Interactive CLI questionnaire (erp_type: odoo | erpnext)
+  ├── playbook_generator.py Claude API + template → Ansible YAML + pager review gate
+  ├── health_check.py      Post-deploy pass/fail table with next-steps checklist
+  ├── clients/
+  │   └── {slug}/          All files for one client co-located here
+  │       ├── config.yaml         Intake form output (not encrypted)
+  │       ├── site.yml            Generated Ansible playbook
+  │       └── docker-compose.yml  Generated compose file
   └── ansible/
-      ├── playbooks/
-      │   └── {client-name}/
-      │       └── site.yml    Generated per client (includes correct ERP role)
+      ├── templates/
+      │   ├── odoo/site.yml.j2    Known-good Odoo base template
+      │   └── erpnext/site.yml.j2 Known-good ERPNext base template
       ├── roles/
       │   ├── odoo/           Odoo 17 CE install role
       │   ├── erpnext/        ERPNext install role
@@ -261,7 +290,87 @@ DEPLOY/ DIRECTORY STRUCTURE:
       │   ├── backup/         S3 backup cron
       │   └── security-patch/ Unattended-upgrades + post-patch health check
       └── inventory/
-          └── {client}.ini    Per-client host config (erp_type field included)
+          └── {slug}.ini      Per-client host config (erp_type field included)
+
+CLI INTERACTION MOCKUPS:
+
+  intake_form.py (interactive questionnaire):
+  ─────────────────────────────────────────
+  $ python deploy/intake_form.py
+
+  ─────────────────────────────────────────
+   HUTABYTE ANTIGRAVITY — New Client Setup
+  ─────────────────────────────────────────
+  Client name      : PT Sinar Abadi Ritel
+  ERP type         [odoo/erpnext]: erpnext
+  Segment          [nonprofit/retailer]: retailer
+  Use cases        (pos inventory sales): pos inventory
+  Domain           : erp.sinarabadi.com
+  Hetzner region   [singapore]: singapore
+  VPS size         [cx31]: cx31
+  Admin email      : admin@sinarabadi.com
+
+  ─────────────────────────────────────────
+   Review before continuing
+  ─────────────────────────────────────────
+    client_name  : PT Sinar Abadi Ritel
+    erp_type     : erpnext
+    domain       : erp.sinarabadi.com
+    use_cases    : [pos, inventory]
+    region       : singapore / cx31
+    admin_email  : admin@sinarabadi.com
+
+  Confirm? [y/N]: y
+
+  ✓ Written: deploy/clients/sinar-abadi/config.yaml
+  ✓ Calling playbook_generator.py...
+
+  HUMAN GATE #1 (playbook review):
+  ─────────────────────────────────────────
+  ✓ Playbook generated: deploy/clients/sinar-abadi/site.yml
+  ✓ docker-compose.yml
+
+  ─────────────────────────────────────────
+   PLAYBOOK REVIEW (HUMAN GATE)
+  ─────────────────────────────────────────
+  [ENTER to review in $PAGER / e to edit / s to skip review]: ←
+
+  (after pager closed:)
+
+  Running pre-deploy checks...
+  ✓ ansible-lint site.yml            — 0 warnings
+  ✓ ansible-playbook --check site.yml — OK (dry-run, no changes)
+
+  Type 'deploy sinar-abadi' to proceed, 'reject' to edit, 'abort' to cancel.
+  > deploy sinar-abadi
+  ✓ Starting deploy in screen session 'deploy-sinar-abadi'...
+    Reattach with: screen -r deploy-sinar-abadi
+
+  HEALTH CHECK OUTPUT (deploy/health_check.py):
+  ─────────────────────────────────────────
+   HEALTH CHECK: sinar-abadi
+   Time: 2026-05-25 14:32:18 WIB
+  ─────────────────────────────────────────
+
+    CHECK                              STATUS    DETAIL
+    ─────────────────────────────────────────────────────
+    ERPNext web UI (HTTP 200)          ✓ PASS    142ms
+    MariaDB reachable (port 3306)      ✓ PASS
+    frappe-bench queue workers         ✓ PASS    2 workers active
+    Backup cron scheduled (02:00 WIB)  ✓ PASS
+    UptimeRobot monitor active         ✓ PASS    Monitor ID: 789123
+    SSL certificate valid              ✓ PASS    Expires: 2026-08-23
+
+    ─────────────────────────────────────────────────────
+    Result: ALL CHECKS PASSED (6/6)
+    Client live at: https://erp.sinarabadi.com
+    Total deploy time: 18m 43s
+
+    Next steps:
+      1. Share login URL with client: https://erp.sinarabadi.com
+      2. Client creates admin password (Settings → Users)
+      3. Add to UptimeRobot dashboard: monitor ID 789123
+      4. File signed LOI copy in deploy/clients/sinar-abadi/
 ```
 
 ---
