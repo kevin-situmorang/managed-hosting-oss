@@ -103,7 +103,7 @@ Do not add a third ERP stack before first LOI is signed.
 | Monitoring | Rp 0 | Rp 50K | UptimeRobot free → paid when SLA contractual |
 | Support labor (AI bot handles 70%) | Rp 20K | Rp 75K | ~0.15hr/client/month |
 | Patching labor (AI automation handles 60%) | Rp 50K | Rp 150K | ~0.4hr/client/month |
-| Claude API (support bot + AIOps) | Rp 5K | Rp 10K | Prompt caching keeps cost low |
+| Claude API (support bot + AIOps) | Rp 5K | Rp 10K | Steady-state only (support + AIOps); Phase 2 playbook generation is one-time per client, large-context, not included here |
 | **Per-client variable subtotal** | **Rp 475K** | **Rp 685K** | |
 
 ### Central Hutabyte Server (Amortized Across All Clients)
@@ -417,7 +417,7 @@ See COGS Worksheet above for full breakeven table and pricing strategy guidance.
 |---|---|---|
 | Build order | Phase 0 → Phase 2 → Phase 3 → Phase 1 | Deploy automation first (highest COGS impact); support bot last (not key differentiator) |
 | ERP stack | Odoo 17 CE (nonprofit) + ERPNext (retailer) | Two pilot targets → two deployment playbooks; no third stack before LOI |
-| ERP client abstraction | common/erp_client.py dispatches to odoo_client.py or erpnext_client.py | Single interface; support bot queries either ERP transparently |
+| ERP client routing | common/erp_router.py dispatches to odoo_client.py or erpnext_client.py | Named "router" not "abstraction" — bodies will have erp_type branches. Define 3–4 concrete query methods + ERPNext REST mappings before building. |
 | Bot deployment | Central Hutabyte server | Fix once, applies to all clients |
 | RAG approach | Prompt-stuffing (Phase 1, deprioritized) | 200k context fits all modules; upgrade to vector RAG if/when support bot ships |
 | Bot channel | Telegram first, WhatsApp later | Zero business verification, free, faster to validate |
@@ -450,7 +450,7 @@ HUTABYTE CENTRAL SERVER (one for all clients)
 │                         │ escalation.py             │   │
 │  common/                │ (if turn_count >= 2)      │   │
 │  ├── pii_firewall.py    └──────────────────────────┘   │
-│  ├── erp_client.py      (Odoo or ERPNext dispatch)     │
+│  ├── erp_router.py      (Odoo or ERPNext dispatch)     │
 │  ├── odoo_client.py     (XML-RPC, Odoo clients)        │
 │  ├── erpnext_client.py  (REST, ERPNext clients)        │
 │  ├── client_router.py                                   │
@@ -507,10 +507,11 @@ P1 = blocks ship; P2 = same branch; P3 = follow-up.
   - Verify: covers 7 required clauses from design doc + AI processing scope
 - [ ] **T3 (P1, human: ~30min / CC: ~10min)** — docs — Document age key management procedure
   - Files: `docs/age-key-procedure.md`
-  - Verify: two custodians named, backup location documented, rotation schedule set
-- [ ] **T4 (P1, human: ~2hrs / CC: ~20min)** — docs — ERP config spec for both pilots
+  - Verify: two custodians NAMED (real people, not "TBD"); backup location documented; rotation schedule set. Both custodians must be named before first client goes live — not after the fifth.
+- [ ] **T4 (P1, human: ~2hrs / CC: ~20min)** — docs — ERP config spec for both pilots + Ansible role overlap assessment
   - Files: `docs/odoo-config-spec.md` (nonprofit modules), `docs/erpnext-config-spec.md` (retailer modules)
   - Verify: each spec lists exact modules, Docker image version, Ansible role names; reviewed before LOI
+  - GATE: count shared vs ERP-specific Ansible roles. If shared role overlap < 50%, ERPNext is a separate product — revisit COGS model before committing to ERPNext in Phase 2
 
 **Phase 2 — Deployment Automation (After LOI, Priority 2)**
 
@@ -526,9 +527,10 @@ P1 = blocks ship; P2 = same branch; P3 = follow-up.
 - [ ] **T8 (P1, human: ~2hrs / CC: ~20min)** — common — Build ERPNext REST read-only client
   - Files: `common/erpnext_client.py`, `tests/test_erpnext_client.py`
   - Verify: ERPNextAuthError and ERPNextTimeoutError raised; only whitelisted fields requested via REST API
-- [ ] **T9 (P1, human: ~1hr / CC: ~15min)** — common — Build ERP abstraction layer + client config router
-  - Files: `common/erp_client.py`, `common/client_config.py`, `common/client_router.py`, `tests/test_client_config.py`
-  - Verify: erp_client.py dispatches to OdooClient or ERPNextClient based on `client_config.erp_type`; UnknownClientError on unknown ID
+- [ ] **T9 (P1, human: ~2hrs / CC: ~15min)** — common — Build ERP router + client config router
+  - Files: `common/erp_router.py`, `common/client_config.py`, `common/client_router.py`, `tests/test_client_config.py`
+  - Pre-condition: define the 3–4 concrete query methods (e.g., `get_installed_apps()`, `get_performance_metrics()`) and their ERPNext REST equivalents before writing any code
+  - Verify: erp_router.py dispatches to OdooClient or ERPNextClient based on `client_config.erp_type`; UnknownClientError on unknown ID; ERPNext PII whitelist documented alongside Odoo whitelist
 - [ ] **T10 (P1, human: ~1hr / CC: ~20min)** — ci — GitHub Actions CI: PII firewall gate
   - Files: `.github/workflows/pii-firewall.yml`, `.github/workflows/test.yml`
   - Verify: merge blocked if PII firewall test fails; runs on every PR
@@ -536,17 +538,22 @@ P1 = blocks ship; P2 = same branch; P3 = follow-up.
   - Files: `deploy/intake_form.py`, `deploy/playbook_generator.py`, `deploy/health_check.py`, `deploy/ansible/roles/odoo/`, `deploy/ansible/roles/erpnext/`, `deploy/ansible/roles/nginx/`, `deploy/ansible/roles/backup/`
   - Verify: dry-run passes for both Odoo and ERPNext; time-to-live from approved intake < 30 minutes; health check confirms all services up
 
-**Phase 3 — AIOps + COGS Automation Suite (After First Client Stable, Priority 3)**
+**Phase 3a — Core AIOps + Patching (After First Client Stable, Priority 3)**
 
 - [ ] **T12 (P2, human: ~1-2 weeks / CC: ~2 days)** — aiops — AIOps alert classifier
   - Files: `aiops/alert_handler.py`, `aiops/classifier.py`, `aiops/incident_formatter.py`, `aiops/runbooks/`
   - Verify: classifies disk_full, memory_oom, odoo_crash/erpnext_crash, db_connection, ssl_expiry, network; Telegram message to engineer < 5 min from alert
-- [ ] **T13 (P2, human: ~3-4 days / CC: ~1 day)** — aiops — Automated security patching scheduler
-  - Files: `aiops/patching_scheduler.py`, `deploy/ansible/roles/security-patch/`
-  - Verify: unattended-upgrades runs on schedule; post-patch health check confirms ERP still up; Hutabyte engineer notified with patch log; human does not need to touch the VPS for routine patches
+- [ ] **T13 (P2, human: ~3-4 days / CC: ~1 day)** — aiops — Automated security patching scheduler (with pre-patch snapshot)
+  - Files: `aiops/patching_scheduler.py`, `deploy/ansible/roles/security-patch/`, `docs/patch-rollback-procedure.md`
+  - Verify: (1) pre-patch Hetzner VPS snapshot taken via Cloud API (~2 min, snapshot IS the rollback path); (2) unattended-upgrades runs; (3) post-patch health check confirms ERP still responds 200; (4) PASS → patch log sent to engineer (no action needed); FAIL → alert sent with snapshot ID so engineer can restore in one command; (5) rollback procedure documented before T13 ships
 - [ ] **T14 (P2, human: ~2-3 days / CC: ~1 day)** — aiops — Backup restore verification
   - Files: `aiops/backup_verifier.py`, `deploy/ansible/roles/backup-verify/`
   - Verify: monthly restore test pulls last S3 backup, spins up ephemeral Docker container, confirms PostgreSQL data is queryable, tears down; alert sent if restore fails
+**Phase 3b — Quality-of-Life COGS Features (After 3+ Clients, deferred from 3a)**
+
+NOTE: T15 and T16 are deferred per outside voice review — single engineer cannot run 5
+Phase 3 work streams while managing first live client. Ship T12+T13+T14 first; revisit T15+T16 at 3+ clients.
+
 - [ ] **T15 (P2, human: ~3-4 days / CC: ~1 day)** — aiops — Client self-service health status page
   - Files: `aiops/health_dashboard/app.py`, `aiops/health_dashboard/templates/`
   - Verify: per-client read-only page shows uptime (last 30 days), last backup timestamp, last patch date, current ERP version; no PII; auth via client token
@@ -558,7 +565,7 @@ P1 = blocks ship; P2 = same branch; P3 = follow-up.
 
 - [ ] **T17 (P3, human: ~5 days / CC: ~2 days)** — support-bot — Build full AI Telegram support bot
   - Files: `support-bot/main.py`, `support-bot/webhook.py`, `support-bot/bot_handler.py`, `support-bot/claude_client.py`, `support-bot/state.py`, `support-bot/escalation.py`, `support-bot/prompts/system_id.md`
-  - Verify: end-to-end Telegram → ERP (via erp_client.py) → Claude → reply; escalation fires at turn 2; no duplicate messages under simulated 5s Telegram retry
+  - Verify: end-to-end Telegram → ERP (via erp_router.py) → Claude → reply; escalation fires at turn 2; no duplicate messages under simulated 5s Telegram retry
   - NOTE: deprioritized — not a key differentiator for managed hosting COGS reduction
 
 ### Parallelization Strategy
@@ -573,24 +580,28 @@ Lane B (Phase 2 infra + shared modules — after LOI):
                → T10 (CI pipeline)        [starts after T5, independent of T6-T9]
                → T11 (deploy automation)  [starts after T9 + T10 complete]
 
-Lane C (Phase 3 COGS suite — after first client stable):
-  T12 (alert classifier) || T13 (patching) || T14 (backup verify) || T15 (health page) || T16 (resource monitor)
+Lane C (Phase 3a — after first client stable):
+  T12 (alert classifier) || T13 (patching + snapshot) || T14 (backup verify)
+  NOTE: only 3 streams — one engineer, one live client. Ship these first.
 
-Lane D (Phase 1 support bot — deprioritized, after 3+ clients):
+Lane D (Phase 3b — after 3+ clients):
+  T15 (health dashboard) || T16 (resource monitor)
+
+Lane E (Phase 1 support bot — deprioritized, after 3+ clients):
   [common/ complete] → T17 (support-bot)
 ```
 
-Launch Lane A immediately. Lane B starts after LOI is signed. Lane C starts after first client is stable. Lane D after 3+ paying clients.
+Launch Lane A immediately. Lane B starts after LOI is signed. Lane C starts after first client is stable. Lanes D and E after 3+ paying clients.
 
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | Full AI-Ops Stack selected, LOI-first sequence, data guardrails |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR | Run 1: 8 arch decisions, PostgreSQL, age key. Run 2: build order resequenced (0→2→3→1), ERPNext added, erp_client.py abstraction, Phase 3 expanded to 5 features (T12–T16), tasks T1–T17 |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR | Run 1: 8 arch decisions, PostgreSQL, age key. Run 2: build order resequenced (0→2→3→1), ERPNext added, erp_router.py abstraction, Phase 3 expanded to 5 features (T12–T16), tasks T1–T17 |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | Not applicable (no UI in Phase 0-1) |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
-| Outside Voice | Codex gpt-5.3 | Independent challenge | 1 | ISSUES_NOTED | SQLite concurrency risk → resolved (PostgreSQL); age key lifecycle → resolved (two custodians + backup) |
+| Outside Voice | Codex gpt-5.3 | Independent challenge | 2 | ISSUES_NOTED | Run 1: SQLite → PostgreSQL; age key → two custodians. Run 2: ERPNext dual-stack cost underestimated → T4 role-overlap gate added; Phase 3 scope creep → split 3a/3b; erp_client → erp_router (honest naming); patching no rollback → pre-patch Hetzner snapshot; Claude API COGS conflation → split steady-state vs one-time; age custodian TBD → must be named before first client |
 
 **CROSS-MODEL:** Codex and Claude eng review agree on: prompt-stuffing for Phase 1, central server architecture, LOI-first build sequence. Disagreement on SQLite (resolved: PostgreSQL chosen). Codex challenged overall complexity of AI stack before product-market proof — user acknowledged and accepted; LOI gate remains the guardrail.
 

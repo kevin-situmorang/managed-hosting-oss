@@ -330,17 +330,22 @@ INCIDENT DETECTION AND DIAGNOSIS FLOW
 
 ─────────────────────────────────────────────────────────────────────
 
-COGS FEATURE 2: AUTOMATED SECURITY PATCHING
+COGS FEATURE 2: AUTOMATED SECURITY PATCHING (with pre-patch snapshot)
 
   aiops/patching_scheduler.py
       │ Runs on schedule (e.g., weekly)
       ▼
+  Hetzner Cloud API: create VPS snapshot (~2 min)   ← ROLLBACK PATH
+      │ snapshot_id stored for this run
+      ▼
   deploy/ansible/roles/security-patch/
       - Runs unattended-upgrades on client VPS
       - Post-patch health check confirms ERP still responds 200
-      │ PASS → patch log sent to Hutabyte engineer (no action needed)
-      │ FAIL → alert sent: engineer investigates manually
+      │ PASS → patch log + snapshot_id sent to engineer (snapshot deleted after 7 days)
+      │ FAIL → alert sent with snapshot_id: "restore with: hcloud server-backup-restore {id}"
+               Engineer executes restore manually — one command, full rollback
   Saves ~0.5hr/client/month of manual patching work
+  Rollback procedure documented in docs/patch-rollback-procedure.md before T13 ships
 
 ─────────────────────────────────────────────────────────────────────
 
@@ -389,13 +394,13 @@ COGS FEATURE 5: RESOURCE RIGHT-SIZING ALERTS
 AIOPS/ DIRECTORY STRUCTURE:
 
   aiops/
-  ├── alert_handler.py        Webhook receiver + metrics fetcher (T12)
-  ├── classifier.py           Claude API classification call (T12)
-  ├── incident_formatter.py   Structured summary generator (T12)
-  ├── patching_scheduler.py   Security patch runner + notifier (T13)
-  ├── backup_verifier.py      Monthly restore test (T14)
-  ├── resource_monitor.py     Right-sizing alerts (T16)
-  ├── health_dashboard/       Client self-service status page (T15)
+  ├── alert_handler.py        Webhook receiver + metrics fetcher (T12, Phase 3a)
+  ├── classifier.py           Claude API classification call (T12, Phase 3a)
+  ├── incident_formatter.py   Structured summary generator (T12, Phase 3a)
+  ├── patching_scheduler.py   Pre-patch snapshot + patch runner + notifier (T13, Phase 3a)
+  ├── backup_verifier.py      Monthly restore test (T14, Phase 3a)
+  ├── resource_monitor.py     Right-sizing alerts (T16, Phase 3b — after 3+ clients)
+  ├── health_dashboard/       Client self-service status page (T15, Phase 3b — after 3+ clients)
   │   ├── app.py
   │   └── templates/
   └── runbooks/               Reference context for classifier
@@ -420,7 +425,8 @@ AIOPS/ DIRECTORY STRUCTURE:
 ║  │  support-bot/     ← Phase 1 (deprioritized): Telegram queries  │ ║
 ║  │  deploy/          ← Phase 2: onboards clients (Odoo+ERPNext)  │ ║
 ║  │  aiops/           ← Phase 3: classifier + COGS automation     │ ║
-║  │  common/          ← shared: PII firewall, erp_client.py,      │ ║
+║  │  common/          ← shared: PII firewall, erp_router.py,      │ ║
+║  │                             odoo_client, erpnext_client,      │ ║
 ║  │                             client router, config loader      │ ║
 ║  │  PostgreSQL       ← conversation state (support bot)          │ ║
 ║  │  configs/clients/ ← age-encrypted YAML per client             │ ║
@@ -481,12 +487,14 @@ Phase 2  ──→  Build T5–T11 (monorepo + deploy automation, ~3–4 weeks w
             First client stable + paying?
                   │
                   ▼
-Phase 3  ──→  Build T12–T16 (AIOps classifier + COGS suite, ~3–4 weeks)
-                  │
+Phase 3a ──→  Build T12–T14 (AIOps classifier + patching + backup verify, ~2–3 weeks)
+                  │  NOTE: only 3 streams — single engineer, live client in parallel
                   ▼
             3+ paying clients?
                   │
                   ▼
+Phase 3b ──→  Build T15–T16 (health dashboard + right-sizing, ~1 week)
+              AND
 Phase 1  ──→  Build T17 (AI Telegram support bot, ~1 week) — DEPRIORITIZED
 ```
 
