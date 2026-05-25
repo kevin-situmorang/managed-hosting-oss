@@ -1,0 +1,1 @@
+/Users/kevinmanatar/conductor/repos/managed-hosting-oss/.claude/skills/gstack/plan-ceo-review/SKILL.md

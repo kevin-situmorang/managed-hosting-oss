@@ -1,0 +1,1 @@
+/Users/kevinmanatar/conductor/repos/managed-hosting-oss/.claude/skills/gstack/make-pdf/SKILL.md
