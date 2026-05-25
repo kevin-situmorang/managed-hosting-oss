@@ -82,26 +82,105 @@ before a signature; plan for this, not a single-meeting close.
 4. No demand evidence yet. Two willing test subjects is not demand. A signed LOI at a
    real price is the evidence.
 
-## COGS Worksheet (Calculate Before Setting Price)
+## COGS Worksheet (Updated — AI-Ops Enabled)
 
-| Cost Item | Est. Monthly (IDR) | Notes |
+### Per-Client Variable COGS (monthly, with AI-Ops)
+
+| Cost Item | Low | High | Notes |
+|---|---|---|---|
+| Client VPS (Hetzner CX31, Singapore) | Rp 350K | Rp 350K | Fixed per client, single-tenant |
+| Backup storage (S3-compatible, 30-day) | Rp 50K | Rp 50K | Daily backups |
+| Monitoring | Rp 0 | Rp 50K | UptimeRobot free → paid when SLA contractual |
+| Support labor (AI bot handles 70%) | Rp 20K | Rp 75K | ~0.15hr/client/month |
+| Patching labor (AI automation handles 60%) | Rp 50K | Rp 150K | ~0.4hr/client/month |
+| Claude API (support bot + AIOps) | Rp 5K | Rp 10K | Prompt caching keeps cost low |
+| **Per-client variable subtotal** | **Rp 475K** | **Rp 685K** | |
+
+### Central Hutabyte Server (Amortized Across All Clients)
+
+One shared server (~Rp 250K/month) runs the support bot, deploy automation, and AIOps classifier.
+
+| Clients | Per-client share | Total COGS low | Total COGS high | Midpoint |
+|---|---|---|---|---|
+| 1 client | Rp 250K | Rp 725K | Rp 935K | **Rp 830K** |
+| 3 clients | Rp 83K | Rp 558K | Rp 768K | **Rp 663K** |
+| 5 clients | Rp 50K | Rp 525K | Rp 735K | **Rp 630K** |
+| 10 clients | Rp 25K | Rp 500K | Rp 710K | **Rp 605K** |
+| 20 clients | Rp 13K | Rp 488K | Rp 698K | **Rp 593K** |
+| 50 clients | Rp 5K | Rp 480K | Rp 690K | **Rp 585K** |
+
+COGS floor stabilizes around **Rp 580K–600K/client** at scale. Multi-tenant Odoo is deferred to 10+ clients.
+
+### Business Breakeven (Full Cost — Including Hutabyte Engineer)
+
+Fixed monthly overhead (not per-client):
+
+| Item | Low | High |
 |---|---|---|
-| Hetzner VPS CX31 (Singapore) | ~Rp 350K | 4 vCPU 8GB RAM, single-tenant per client for pilot phase |
-| Backup storage (S3-compatible) | ~Rp 50K | Daily backups, 30-day retention |
-| Monitoring (UptimeRobot free tier) | Rp 0 | Upgrade to paid if SLA is guaranteed |
-| Security patching labor (est. 1hr/client/month) | Rp 150K–500K | Depends on Hutabyte engineer rate |
-| Support labor (base tier, est. 0.5hr/client/month) | Rp 75K–250K | Scales with client count |
-| Total COGS estimate | Rp 625K–1.15M | Per client per month |
+| 1 Hutabyte engineer (DevOps/Python) | Rp 8M | Rp 15M |
+| Central server | Rp 250K | Rp 400K |
+| Tools (GitHub, domain, monitoring) | Rp 200K | Rp 400K |
+| **Total fixed overhead** | **Rp 8.45M** | **Rp 15.8M** |
 
-Implication: Rp 500K/month base price does not cover estimated COGS. Options:
-A) Raise base price to Rp 1M–1.5M/month (recommended — simplest, honest)
-B) Subsidize base with mandatory add-on bundling (adds sales complexity)
-C) Multi-tenant Odoo to reduce per-client infra cost (DO NOT pursue for pilot —
-   multi-tenant Odoo requires separate architecture design: data isolation, upgrade
-   sequencing, module conflict management. Out of scope until 10+ clients.)
+Breakeven formula: `N × Revenue/client = Fixed overhead + N × COGS/client`
 
-Decision required before LOI price is named: choose A or B, calculate resulting
-price floor, confirm Hutabyte can sustain it.
+**At Rp 500K/user/month with 20 users/client (Rp 10M revenue each):**
+
+```
+N × 10M = 11M (fixed, midpoint) + N × 630K
+N = 11M / 9.37M ≈ 1.2 → breakeven at 2 clients
+```
+
+**At Rp 500K/user/month with 10 users/client (Rp 5M revenue each):**
+
+```
+N × 5M = 11M + N × 630K
+N = 11M / 4.37M ≈ 2.5 → breakeven at 3 clients
+```
+
+| Users/client | Revenue/client | Clients to breakeven | Profit at 5 clients | Profit at 10 clients |
+|---|---|---|---|---|
+| 10 users | Rp 5M | **3 clients** | Rp 10.7M/mo | Rp 32.9M/mo |
+| 20 users | Rp 10M | **2 clients** | Rp 35.5M/mo | Rp 82.5M/mo |
+| 30 users | Rp 15M | **2 clients** | Rp 60.3M/mo | Rp 132M/mo |
+
+### ⚠️ Pricing Strategy Issue — Rp 500K/user vs SaaS
+
+At Rp 500K/user/month, Hutabyte matches the top of the SaaS market — not undercutting it.
+
+| Scenario | Cost for 20-user company | Position vs Hutabyte |
+|---|---|---|
+| SaaS low-end (Rp 170K/user) | Rp 3.4M/month | Hutabyte is 3× MORE expensive |
+| SaaS high-end (Rp 500K/user) | Rp 10M/month | Hutabyte is SAME price |
+| **Hutabyte at Rp 500K/user** | **Rp 10M/month** | No price incentive to switch |
+
+The original flat-rate model was the differentiator. At Rp 500K/company flat (unlimited users),
+a 20-user company pays Hutabyte Rp 500K vs Rp 3.4M–10M SaaS — 85–95% cheaper.
+
+### Recommended Pricing Models
+
+| Model | Price | Revenue (20 users) | Competitive position |
+|---|---|---|---|
+| Flat company rate | Rp 1M–1.5M/month | Rp 1M–1.5M | 55–85% cheaper than SaaS → easy sell |
+| Per-user competitive | Rp 50K–100K/user | Rp 1M–2M | 70–80% cheaper than SaaS → easy sell |
+| Per-user (proposed) | Rp 500K/user | Rp 10M | Same as expensive SaaS → hard sell |
+
+### COGS Floor by Users — Minimum Viable Price
+
+At 10+ clients (Rp 605K midpoint COGS), the minimum price per user that covers COGS:
+
+| Users/client | Min price/user to cover COGS |
+|---|---|
+| 5 users | Rp 121K/user |
+| 10 users | Rp 61K/user |
+| 20 users | Rp 30K/user |
+| 30 users | Rp 20K/user |
+
+At 20+ users per client, even Rp 50K/user covers all COGS with margin.
+The unit economics work at almost any price once client size ≥ 20 users.
+
+Decision required before LOI: confirm the non-profit's current SaaS spend and user count,
+then set a price that is visibly cheaper — not just cheaper in total but cheaper per user.
 
 ## Service Agreement Required Clauses
 
@@ -302,12 +381,19 @@ Phase 3 (After 3+ clients): Build AIOps alert classifier (~1-2 weeks)
 
 | Cost Item | Without AI | With AI (50 clients) | Notes |
 |---|---|---|---|
-| Support labor | Rp 75K-250K/client/mo | Rp 20K-75K/client/mo | 70% reduction via bot |
-| Deploy/patch labor | Rp 150K-500K/client/mo | Rp 50K-150K/client/mo | 60% reduction via automation |
-| Claude API cost | Rp 0 | ~Rp 2K/client/mo | Negligible at scale |
-| Total COGS | Rp 625K-1.15M/client/mo | Rp 370K-580K/client/mo | Makes Rp 500K base viable |
+| Support labor | Rp 75K–250K/client/mo | Rp 20K–75K/client/mo | 70% reduction via bot |
+| Deploy/patch labor | Rp 150K–500K/client/mo | Rp 50K–150K/client/mo | 60% reduction via automation |
+| Claude API cost | Rp 0 | ~Rp 5K–10K/client/mo | Support bot + AIOps; prompt caching |
+| Central server (amortized) | Rp 0 | ~Rp 5K–50K/client/mo | Scales down as clients grow |
+| **Total COGS** | **Rp 625K–1.15M** | **Rp 480K–690K/client/mo** | Breakeven at 2–3 clients |
 
-At 50 clients with Rp 1M/month pricing: ~Rp 21M-32M/month gross profit, 2 engineers.
+At 10 clients, 20 users each, Rp 100K/user/month pricing:
+→ Revenue: Rp 20M/month | COGS: Rp 6.05M | Gross profit: **Rp 13.95M/month** (~70% margin)
+
+At 20 clients, 20 users each, Rp 100K/user/month pricing:
+→ Revenue: Rp 40M/month | COGS: Rp 11.86M | Gross profit: **Rp 28.14M/month** (~70% margin)
+
+See COGS Worksheet above for full breakeven table and pricing strategy guidance.
 
 ## Engineering Architecture (Added by /plan-eng-review 2026-05-25)
 
