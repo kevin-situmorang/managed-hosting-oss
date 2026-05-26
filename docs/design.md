@@ -24,8 +24,10 @@ The core value prop is not software discounts — it is "the IT team you don't h
 - Both willing to try open-source version under a free pilot — confirmed interest only
 - Current SaaS spend: Rp 170K–500K/user/month (est. Rp 3.4M–10M/month for 20 users)
 - Neither has confirmed willingness to pay — pilot is the demand validation vehicle
-- Target pricing: Rp 500K/month flat (unlimited users) + Rp 1M/month/app optional
-  24/7 support add-on
+- Target pricing: Rp 1.7M–2.4M/client/month flat (midpoint Rp 2.05M, single-tenant VPS)
+  + optional Rp 1M/month/client 24/7 support add-on (30% attach rate assumed)
+- Shared VPS fallback: Rp 1.0M/client/month — only for clients who accept shared
+  infrastructure and have low uptime/support requirements
 
 NOTE: Interest is not demand. A signed LOI at a real price is the only output that
 matters from the pilot phase.
@@ -72,7 +74,9 @@ Do not add a third ERP stack before first LOI is signed.
 - Hutabyte must maintain a standardized stack — custom per-client work must be exceptional
   and billable, not the default. Decision rule: any Odoo module not in the standard stack
   requires written approval from the Hutabyte lead and a separate quoted engagement.
-- Pricing at Rp 500K/month flat may not cover COGS — must calculate floor before signing
+- Pricing validated: Rp 1.7M–2.4M/client/month flat (Rp 2.05M default) covers full COGS
+  at 8+ clients with ~70% gross margin. Shared VPS fallback Rp 1.0M requires ~19 clients
+  to break even — do not offer as default
 - One segment first: retailer and non-profit need different Odoo module configurations
 - No product code exists yet — this is a pre-product business design exercise
 
@@ -81,9 +85,10 @@ Do not add a third ERP stack before first LOI is signed.
 1. Standardization is the model. One stack, one config, deployed repeatably across all
    clients. Custom per-client work is billable and exceptional.
 
-2. Base price may not cover COGS. Rp 500K/month may not cover hosting + patching +
-   support hours at steady state. Real revenue must come from add-ons or the base price
-   must be higher. Calculate COGS before setting price.
+2. Pricing validated against COGS. Standard MRR flat: Rp 1.7M–2.4M/client/month
+   (midpoint Rp 2.05M) covers full COGS at 8+ clients with ~70% gross margin. Breakeven
+   at ~8 clients (Rp 2.05M); ~6 clients at Rp 2.4M ceiling. Shared VPS fallback at
+   Rp 1.0M requires ~19 clients to break even — restrict to eligible clients only.
 
 3. Two pilots, two stacks. Non-profit → Odoo 17 Community. Retailer → ERPNext.
    These are the only two ERP stacks in scope. No third stack before first LOI.
@@ -92,7 +97,7 @@ Do not add a third ERP stack before first LOI is signed.
 4. No demand evidence yet. Two willing test subjects is not demand. A signed LOI at a
    real price is the evidence.
 
-## COGS Worksheet (Updated — AI-Ops Enabled)
+## COGS Worksheet (Updated — Excel v2, 2026-05-26)
 
 ### Per-Client Variable COGS (monthly, with AI-Ops)
 
@@ -103,27 +108,25 @@ Do not add a third ERP stack before first LOI is signed.
 | Monitoring | Rp 0 | Rp 50K | UptimeRobot free → paid when SLA contractual |
 | Support labor (AI bot handles 70%) | Rp 20K | Rp 75K | ~0.15hr/client/month |
 | Patching labor (AI automation handles 60%) | Rp 50K | Rp 150K | ~0.4hr/client/month |
-| Claude API (support bot + AIOps) | Rp 5K | Rp 10K | Steady-state only (support + AIOps); Phase 2 playbook generation is one-time per client, large-context, not included here |
+| Claude API (support bot + AIOps) | Rp 5K | Rp 10K | Steady-state only; Phase 2 playbook generation is one-time per client, not included here |
 | **Per-client variable subtotal** | **Rp 475K** | **Rp 685K** | |
 
 ### Central Hutabyte Server (Amortized Across All Clients)
 
-One shared server (~Rp 250K/month) runs the support bot, deploy automation, and AIOps classifier.
+One shared server (Rp 250K–400K/month, midpoint Rp 325K) runs the support bot, deploy automation, and AIOps classifier.
 
-| Clients | Per-client share | Total COGS low | Total COGS high | Midpoint |
+| Clients | Per-client share (mid) | Fully-loaded COGS/client Low | Fully-loaded COGS/client High | Midpoint |
 |---|---|---|---|---|
-| 1 client | Rp 250K | Rp 725K | Rp 935K | **Rp 830K** |
-| 3 clients | Rp 83K | Rp 558K | Rp 768K | **Rp 663K** |
-| 5 clients | Rp 50K | Rp 525K | Rp 735K | **Rp 630K** |
-| 10 clients | Rp 25K | Rp 500K | Rp 710K | **Rp 605K** |
-| 20 clients | Rp 13K | Rp 488K | Rp 698K | **Rp 593K** |
-| 50 clients | Rp 5K | Rp 480K | Rp 690K | **Rp 585K** |
+| 1 client | Rp 325K | Rp 725K | Rp 1,085K | **Rp 905K** |
+| 5 clients | Rp 65K | Rp 525K | Rp 765K | **Rp 645K** |
+| 10 clients | Rp 32.5K | Rp 500K | Rp 725K | **Rp 612.5K** |
+| 20 clients | Rp 16.25K | Rp 487.5K | Rp 705K | **Rp 596.25K** |
+| 50 clients | Rp 6.5K | Rp 480K | Rp 693K | **Rp 586.5K** |
+| 100 clients | Rp 3.25K | Rp 477.5K | Rp 689K | **Rp 583.25K** |
 
-COGS floor stabilizes around **Rp 580K–600K/client** at scale. Multi-tenant Odoo is deferred to 10+ clients.
+COGS floor stabilizes around **Rp 580K–615K/client** at scale.
 
-### Business Breakeven (Full Cost — Including Hutabyte Engineer)
-
-Fixed monthly overhead (not per-client):
+### Fixed Monthly Overhead
 
 | Item | Low | High |
 |---|---|---|
@@ -131,66 +134,60 @@ Fixed monthly overhead (not per-client):
 | Central server | Rp 250K | Rp 400K |
 | Tools (GitHub, domain, monitoring) | Rp 200K | Rp 400K |
 | **Total fixed overhead** | **Rp 8.45M** | **Rp 15.8M** |
+| **Fixed overhead midpoint** | **Rp 11.8M/month** | | Used in breakeven calculations |
 
-Breakeven formula: `N × Revenue/client = Fixed overhead + N × COGS/client`
+### Pricing Strategy
 
-**At Rp 500K/user/month with 20 users/client (Rp 10M revenue each):**
+Three tiers for different client segments. All prices are per-client flat (not per-user).
 
-```
-N × 10M = 11M (fixed, midpoint) + N × 630K
-N = 11M / 9.37M ≈ 1.2 → breakeven at 2 clients
-```
-
-**At Rp 500K/user/month with 10 users/client (Rp 5M revenue each):**
-
-```
-N × 5M = 11M + N × 630K
-N = 11M / 4.37M ≈ 2.5 → breakeven at 3 clients
-```
-
-| Users/client | Revenue/client | Clients to breakeven | Profit at 5 clients | Profit at 10 clients |
-|---|---|---|---|---|
-| 10 users | Rp 5M | **3 clients** | Rp 10.7M/mo | Rp 32.9M/mo |
-| 20 users | Rp 10M | **2 clients** | Rp 35.5M/mo | Rp 82.5M/mo |
-| 30 users | Rp 15M | **2 clients** | Rp 60.3M/mo | Rp 132M/mo |
-
-### ⚠️ Pricing Strategy Issue — Rp 500K/user vs SaaS
-
-At Rp 500K/user/month, Hutabyte matches the top of the SaaS market — not undercutting it.
-
-| Scenario | Cost for 20-user company | Position vs Hutabyte |
-|---|---|---|
-| SaaS low-end (Rp 170K/user) | Rp 3.4M/month | Hutabyte is 3× MORE expensive |
-| SaaS high-end (Rp 500K/user) | Rp 10M/month | Hutabyte is SAME price |
-| **Hutabyte at Rp 500K/user** | **Rp 10M/month** | No price incentive to switch |
-
-The original flat-rate model was the differentiator. At Rp 500K/company flat (unlimited users),
-a 20-user company pays Hutabyte Rp 500K vs Rp 3.4M–10M SaaS — 85–95% cheaper.
-
-### Recommended Pricing Models
-
-| Model | Price | Revenue (20 users) | Competitive position |
+| Pricing Tier | Price/client/month | Use Case | Eligibility |
 |---|---|---|---|
-| Flat company rate | Rp 1M–1.5M/month | Rp 1M–1.5M | 55–85% cheaper than SaaS → easy sell |
-| Per-user competitive | Rp 50K–100K/user | Rp 1M–2M | 70–80% cheaper than SaaS → easy sell |
-| Per-user (proposed) | Rp 500K/user | Rp 10M | Same as expensive SaaS → hard sell |
+| Shared VPS fallback | Rp 1.0M | Small OSS, low data sensitivity, low uptime SLA | Client accepts shared VPS; strict criteria required |
+| Standard floor | Rp 1.7M | Standard managed hosting, single-tenant | Default minimum for single-tenant |
+| Standard default | Rp 2.05M | Model default for planning and LOI | Midpoint of standard range |
+| Standard ceiling | Rp 2.4M | Higher SLA / heavier complexity | Heavier process/support requirements |
+| Support add-on (optional) | + Rp 1.0M | Optional 24/7 SLA support | Separate from base MRR; 30% attach rate assumed |
 
-### COGS Floor by Users — Minimum Viable Price
+**Competitive position vs Indonesian SaaS:** A 20-user company on SaaS pays Rp 3.4M–10M/month. Hutabyte at Rp 2.05M/month flat is 40–80% cheaper regardless of user count.
 
-At 10+ clients (Rp 605K midpoint COGS), the minimum price per user that covers COGS:
+**Shared VPS risk:** The Rp 1.0M tier only breaks even at ~19 clients. Define eligibility criteria before publishing this tier. Do not offer as default.
 
-| Users/client | Min price/user to cover COGS |
-|---|---|
-| 5 users | Rp 121K/user |
-| 10 users | Rp 61K/user |
-| 20 users | Rp 30K/user |
-| 30 users | Rp 20K/user |
+### Business Breakeven (With AI-Ops, Default Price Rp 2.05M/client)
 
-At 20+ users per client, even Rp 50K/user covers all COGS with margin.
-The unit economics work at almost any price once client size ≥ 20 users.
+Fixed overhead midpoint: Rp 11.8M/month.
 
-Decision required before LOI: confirm the non-profit's current SaaS spend and user count,
-then set a price that is visibly cheaper — not just cheaper in total but cheaper per user.
+| Clients | Revenue | AI Variable+Central COGS | Gross Profit | Net Profit (after fixed OH) | Gross Margin |
+|---|---|---|---|---|---|
+| 1 | Rp 2.05M | Rp 905K | Rp 1.145M | **-Rp 10.655M** | 55.9% |
+| 5 | Rp 10.25M | Rp 3.225M | Rp 7.025M | **-Rp 4.775M** | 68.5% |
+| 10 | Rp 20.5M | Rp 6.125M | Rp 14.375M | **+Rp 2.575M** | 70.1% |
+| 20 | Rp 41.0M | Rp 11.925M | Rp 29.075M | **+Rp 17.275M** | 70.9% |
+| 50 | Rp 102.5M | Rp 29.325M | Rp 73.175M | **+Rp 61.375M** | 71.4% |
+
+**Breakeven: ~8–9 clients** at Rp 2.05M/client/month (base MRR only, before support add-on).
+
+### Support Add-on Economics (30% Attach Rate, Rp 1M/adopting client)
+
+| Clients | Support Revenue | Support Cost (With AI) | Net Contribution | Net Profit incl Support | Gross Margin incl Support |
+|---|---|---|---|---|---|
+| 1 | Rp 300K | Rp 75K | Rp 225K | **-Rp 10.43M** | 58.3% |
+| 5 | Rp 1.5M | Rp 375K | Rp 1.125M | **-Rp 3.65M** | 69.4% |
+| 10 | Rp 3.0M | Rp 750K | Rp 2.25M | **+Rp 4.825M** | 70.7% |
+| 20 | Rp 6.0M | Rp 1.5M | Rp 4.5M | **+Rp 21.775M** | 71.4% |
+| 50 | Rp 15.0M | Rp 3.75M | Rp 11.25M | **+Rp 72.625M** | 71.9% |
+
+Support add-on nets **Rp 225K/adopting client/month** at 30% attach rate — clean upsell economics at any scale.
+
+### Breakeven by Pricing Tier (With AI-Ops + 30% Support Attach)
+
+| Pricing Tier | Approx Breakeven Clients | Profit @ 10 clients | Profit @ 20 clients |
+|---|---|---|---|
+| Shared VPS (Rp 1.0M) | ~19 clients | -Rp 5.675M | +Rp 775K |
+| Standard floor (Rp 1.7M) | ~9 clients | +Rp 1.325M | +Rp 14.775M |
+| **Standard default (Rp 2.05M)** | **~8 clients** | **+Rp 4.825M** | **+Rp 21.775M** |
+| Standard ceiling (Rp 2.4M) | ~6 clients | +Rp 8.325M | +Rp 28.775M |
+
+AI-Ops vs no-AI: saves **Rp 316K–330K/client/month** at 10–100 clients (~33–36% COGS reduction).
 
 ## Service Agreement Required Clauses
 
@@ -238,7 +235,8 @@ Effort: M | Risk: Med | Skipped — premature before demand evidence exists.
 
 ### Approach C: Sell "Your IT Department," Not Software
 Pitch: "Hutabyte is your IT department — fixed monthly fee, we handle everything."
-Price at Rp 2M–3M/month. Open-source stack becomes an implementation detail.
+Price at Rp 2.05M/month (current model default) or Rp 2.4M/month for higher-SLA clients.
+Open-source stack becomes an implementation detail.
 Effort: S | Risk: Med
 Trigger: activate if pilot rejects price and states any flat fee feels too high, OR
 if week-4 LOI gate from Approach A is not met.
@@ -262,7 +260,9 @@ Approach C framing immediately.
 3. What is Hutabyte's engineer hourly rate? (Required to calculate COGS accurately)
 4. What is Hutabyte's policy when a client requests a module not in the standard stack?
    (Billable customization or service refusal to protect standardization?)
-5. If the add-on take rate at conversion is below 30%, is the base price model viable?
+5. If the support add-on attach rate is below 30%, is the base price model (Rp 2.05M) still
+   viable? (Yes — breakeven moves from ~8 to ~9 clients at 0% attach rate. The base model
+   is not dependent on support add-on revenue at 10+ clients.)
 
 ## Success Criteria
 
@@ -603,7 +603,7 @@ Launch Lane A immediately. Lane B starts after LOI is signed. Lane C starts afte
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | Full AI-Ops Stack selected, LOI-first sequence, data guardrails |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 2 | CLEAR | Run 1: Full AI-Ops Stack selected, LOI-first sequence, data guardrails. Run 2: Pricing updated from Rp 500K flat (stale) to Rp 1.7M–2.4M/client/month (midpoint Rp 2.05M); shared VPS fallback Rp 1.0M added with eligibility restriction; breakeven at ~8 clients confirmed; support add-on economics (30% attach, Rp 225K net/adopting client) locked. |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR | Run 1: 8 arch decisions, PostgreSQL, age key. Run 2: build order resequenced (0→2→3→1), ERPNext added, erp_router.py abstraction, Phase 3 expanded to 5 features (T12–T16), tasks T1–T17 |
 | Design Review | `/plan-design-review` | Phase 2 interaction design | 1 | CLEAR | Rated 2/10 → 6/10. Three unspecified interaction points designed (intake CLI, playbook review gate, health check output). Locked: template-based generation, typed approval, deploy/clients/{slug}/ file location, screen/tmux SSH resilience, shared deploy/cli.py. 6 decisions recorded in Decisions Locked table. |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | Not applicable (no UI in Phase 0-1) |
