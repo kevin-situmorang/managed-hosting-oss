@@ -73,6 +73,7 @@ Phase-fail signal: Month 6 has <3 live clients → demand real but pricing/posit
 | Milestone | Target |
 |---|---|
 | Phase 3a AIOps shipped | T12–T14: alert classifier, automated patching, backup verification |
+| Multi-tenant Odoo spike (1-week) | Eng-review E1: validate the Rp 600K→Rp 250K COGS claim on real load before Phase 3 commits to the shared tier; if spike fails, drop shared tier |
 | Sales playbook documented | Discovery, demo, objection map, contract template — all Bahasa Indonesia |
 | First non-founder hire | Junior sales/CS (Rp 6–8M + commission) |
 | Second engineer hire | DevOps/Python (Rp 12–18M) |
@@ -100,7 +101,9 @@ Phase-fail signal: Sales hire churns or fails to close in 6 months → sales mot
 | Mid-enterprise pilot | 1–2 mid-enterprise (50–200 employees) at Rp 4–8M/month |
 | Third engineer hire | Senior Python/Ansible |
 | Customer Success function | Dedicated CS lead (separate from sales) |
-| Multi-tenant Odoo option | For shared VPS tier — COGS Rp 600K → Rp 250K/client |
+| Multi-tenant Odoo option (gated by Phase 2 spike) | For shared VPS tier — COGS Rp 600K → Rp 250K/client. Skip if spike showed noisy-neighbor or cold-start issues |
+| Provisioning API (eng-review E5) | REST API for partner-initiated provisioning: POST /api/partners/{partner}/provision with NPWP+email; OAuth/HMAC auth; billing pass-through. Foundation for Phase 4 self-service UI |
+| AI support bot T17 (moved from Phase 4, eng-review E7) | Pilot deflection-rate gate: ≥60% of tier-1 tickets auto-resolved on a sample of 50+ tickets before Phase 4 economics depend on it |
 | 50 paying clients | 30 standard + 12 shared + 6 mid-market + 2 channel-only |
 | MRR | Rp 90–110M |
 | Gross margin | ≥72% |
@@ -118,10 +121,10 @@ Phase-fail signal: Month 24, no signed channel partner → partner pitch not cre
 
 | Milestone | Target |
 |---|---|
-| Self-service signup live | Web form → automated provisioning → first login <60 min, no human |
-| Mid-enterprise SLA tier | 99.9% uptime, P1 response 30 min, dedicated CSM, Rp 6M–12M/month |
-| Marketplace beta (stretch) | Indonesian Odoo module marketplace, third-party developers, 20% rev share |
-| Phase 1 AI support bot rolled out | T17 from design.md — economically justified only at this scale |
+| Self-service signup UI (layered on Phase 3 API) | Web form → existing provisioning API → first login <60 min, no human. Eng-review E2 guardrails required: payment auth + Indonesian NPWP KYC + automated playbook validation + abuse rate limit + auto-rollback on failed health check |
+| Mid-enterprise SLA tier | 99.5% uptime (matching Hetzner Cloud SLA, downgraded from 99.9% per eng-review E3), P1 response 30 min, dedicated CSM, Rp 6M–12M/month. 99.9% tier deferred to Phase 5 + HA architecture |
+| Curated vertical pre-configs (replaces marketplace, eng-review E6) | Hutabyte-reviewed vertical Odoo configs (3→5→8 by Phase 4). If marketplace is kept as stretch, must include: manual code review per submission, signed publisher identity, kill-switch per module |
+| AI support bot operational (built in Phase 3) | T17 deflection rate ≥70% on real Phase 3 tickets required before Phase 4 economics depend on it |
 | 100 paying clients | 50 standard + 25 shared + 20 mid-market + 5 channel-only |
 | MRR | Rp 200–280M |
 | ARR | Rp 2.5B–3.4B |
@@ -137,12 +140,14 @@ Phase-fail signal: Month 33, self-service signups <5% of new clients → product
 ## Cross-Phase Strategic Bets
 
 1. **Indonesian-language brand-as-moat.** Phase 1 onward: every doc, support message, error string, contract is Bahasa Indonesia first. Localization is Phase 0 work, not Phase 4.
-2. **age-encrypted client config as platform foundation.** Build admin UI, audit log, rotation automation, multi-custodian quorum — it powers Phase 4 self-service.
+2. **age-encrypted client config as platform foundation.** Build admin UI, audit log, rotation automation. Use age multi-recipient (any-of-N) for Phase 0–3 — NOT M-of-N quorum, which age doesn't support natively and would require rolling Shamir secret sharing (eng-review E4: boring-by-default violation). Revisit HashiCorp Vault at Phase 4 if true quorum becomes a real customer ask.
 3. **AI cost arbitrage.** Claude API at Rp 5K–10K/client/month is trivial vs Rp 200M+ revenue. Spend aggressively on AI-augmented support, deployment, incident classification.
 4. **Compliance as mid-market wedge.** Phase 3: publish Hutabyte compliance whitepaper (UU PDP 2022, OJK, KOMINFO). Mid-enterprises buy compliance reassurance.
 5. **Open-source contribution.** From Phase 2: contribute Indonesian localization to Odoo + ERPNext (Bahasa translations, IDR, e-Faktur PPN). Recruiting hook + credibility moat.
 
 ## Risk Register
+
+### Business/operational risks
 
 | Risk | Phase | Mitigation |
 |---|---|---|
@@ -153,6 +158,18 @@ Phase-fail signal: Month 33, self-service signups <5% of new clients → product
 | Consultant copies playbook | 2–3 | Brand, verticalization, AI COGS moat |
 | IDR / Hetzner EUR exposure | All | Currency hedge after Rp 50M MRR; local hosting at Phase 4 |
 | Regulatory shift (data residency) | 3–4 | Compliance whitepaper in Phase 3 doubles as regulatory hedge |
+
+### Engineering risks (from /plan-eng-review, 2026-05-28)
+
+| Risk ID | Risk | Phase | Resolution |
+|---|---|---|---|
+| E1 | Multi-tenant Odoo cost claim unvalidated | 3 | Phase 2 spike validates Rp 600K→Rp 250K before Phase 3 commits |
+| E2 | Self-service removes human gates without replacement | 4 | Payment + NPWP KYC + playbook validation + rate-limit + auto-rollback designed before build |
+| E3 | 99.9% SLA exceeds Hetzner infrastructure capability | 4 | Downgraded to 99.5%; 99.9% deferred to Phase 5 + HA architecture |
+| E4 | age library does not support M-of-N quorum natively | All | Use age multi-recipient (any-of-N); revisit Vault at Phase 4 if quorum becomes real ask |
+| E5 | Channel partner API needed Phase 3, self-service infra Phase 4 | 3 | Provisioning API pulled forward to Phase 3 as partner-readiness; self-service UI layered on top in Phase 4 |
+| E6 | Marketplace third-party module supply chain risk | 4 | Replace with Hutabyte-curated verticals OR require manual review + signed identity + kill switch |
+| E7 | AI support bot was deprioritized, now load-bearing for Phase 4 GM | 3+ | T17 moved to Phase 3 with ≥60% deflection-rate exit gate before Phase 4 plans depend on it |
 
 ## Decision Forks
 
@@ -184,3 +201,15 @@ All 8 proposals accepted as part of the 100x plan.
 - Multilingual (English) ops — defer until first non-Indonesian client signs (likely Phase 4+)
 - Mobile app for client portal — defer until web self-service proves user behavior pattern
 - Third ERP stack (e.g., Dolibarr) — explicitly excluded by design.md; do not add before Phase 4
+- HA architecture for 99.9% SLA tier — Phase 5 work, gated by real mid-enterprise customer ask (eng-review E3)
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | SCOPE_EXPANSION mode; 8 scope proposals accepted, 4 deferred; platform+channel hybrid + SME-first sequencing locked |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 7 engineering assumptions challenged, 7 resolved: E1 multi-tenant Odoo (spike-gated), E2 self-service guardrails (5 designed), E3 SLA 99.9→99.5, E4 age quorum→multi-recipient, E5 provisioning API pulled to Phase 3, E6 marketplace→curated verticals, E7 AI bot moved to Phase 3 |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | Not applicable to 36-month strategy doc |
+
+- **UNRESOLVED:** 0
+- **VERDICT:** CEO + ENG CLEARED — engineering assumptions validated and folded into milestone tables. Phase 2 multi-tenant spike, Phase 3 provisioning API + AI bot deflection gate, Phase 4 self-service guardrail stack, and SLA downgrade now baked into the plan.
